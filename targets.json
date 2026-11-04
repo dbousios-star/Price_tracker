@@ -4,13 +4,13 @@
     "url": "https://www.skroutz.gr/s/57603878/Creative-Pebble-X-Icheia-Ypologisti-2-0-me-RGB-Fotismo-kai-Bluetooth-Ischyos-30W-se-Mayro-CHroma.html",
     "css_selector": "p.price_color",
     "currency": "GBP",
-    "use_playwright": false
+    "use_playwright": true
   },
   {
     "name": "Edifier speakers",
     "url": "https://www.skroutz.gr/s/19955878/Edifier-G2000-RGB-Asyrmata-Icheia-Ypologisti-2-0-me-RGB-Fotismo-kai-Bluetooth-Ischyos-32W-se-Mayro-CHroma.html#description",
     "css_selector": "p.price_color",
     "currency": "GBP",
-    "use_playwright": false
+    "use_playwright": true
   }
 ]
