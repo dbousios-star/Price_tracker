@@ -45,6 +45,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Playwright Chromium
+        # Needed by targets with "use_playwright": true (skroutz.gr / Cloudflare).
+        run: python -m playwright install --with-deps chromium
+
       - name: Create database if missing
         run: python src/tracker.py --init-db
 
@@ -57,6 +61,9 @@ jobs:
           TARGETS_FILE: targets.json
           ALERT_THRESHOLD_PCT: "0"
           LOG_LEVEL: INFO
+          # A Cloudflare interstitial can take 10-20s to clear before the price
+          # appears, so give the browser more room than the 20s default.
+          REQUEST_TIMEOUT: "60"
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$INPUT_DRY_RUN" = "true" ]; then

@@ -5,7 +5,7 @@ lxml>=5.2.1
 python-dotenv>=1.0.1
 
 # Optional: dynamic-content fallback (requirement 3.A).
-# Uncomment the two lines below (and run `playwright install chromium`) when a
-# target renders its price with client-side JavaScript and you set
-# "use_playwright": true for it in targets.json.
-# playwright>=1.44.0
+# Required for targets that set "use_playwright": true (skroutz.gr sits behind
+# Cloudflare, so its prices are only readable through a real browser).
+# After installing, run `python -m playwright install chromium` once per machine.
+playwright>=1.44.0

@@ -272,7 +272,14 @@ class PriceScraper:
         return self.extract_price(html, css_selector, url=url)
 
     def _fetch_price_with_playwright(self, url: str, css_selector: str) -> float:
-        """Headless-browser fallback for client-side rendered prices."""
+        """Headless-browser fallback for client-side rendered prices.
+
+        Bot-protection interstitials (Cloudflare's "Just a moment...") beat
+        plain HTTP clients entirely, and they do not always clear on the first
+        page load, so the page is reloaded up to ``max_retries`` extra times
+        while reusing the same browser context - any clearance cookie the first
+        attempt earned is therefore kept for the retry.
+        """
         try:
             from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -282,22 +289,46 @@ class PriceScraper:
             ) from exc
 
         timeout_ms = int(self.timeout * 1000)
+        attempts = self.max_retries + 1
+        last_error: Optional[Exception] = None
+
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
             try:
-                page = browser.new_page(
-                    user_agent=random.choice(self.user_agents), locale="en-US"
+                context = browser.new_context(
+                    user_agent=random.choice(self.user_agents), locale="el-GR"
                 )
-                page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                page.wait_for_selector(css_selector, timeout=timeout_ms, state="attached")
-                raw_text = page.locator(css_selector).first.inner_text().strip()
-                return parse_price_text(raw_text)
-            except ScraperError:
-                raise
-            except Exception as exc:
+                for attempt in range(1, attempts + 1):
+                    page = context.new_page()
+                    try:
+                        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                        page.wait_for_selector(
+                            css_selector, timeout=timeout_ms, state="attached"
+                        )
+                        raw_text = page.locator(css_selector).first.inner_text().strip()
+                        return parse_price_text(raw_text)
+                    except PriceParseError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001 - playwright raises its own tree
+                        last_error = ScraperError(
+                            f"Playwright could not read {css_selector!r} from {url} "
+                            f"(attempt {attempt}/{attempts}): {exc}"
+                        )
+                        LOGGER.warning("%s", last_error)
+                    finally:
+                        page.close()
+
+                    if attempt < attempts:
+                        time.sleep(self.backoff_seconds * attempt)
+
                 raise ScraperError(
-                    f"Playwright could not read {css_selector!r} from {url}: {exc}"
-                ) from exc
+                    f"Playwright gave up on {url} after {attempts} attempt(s). "
+                    "The price may be behind a bot-protection challenge: "
+                    f"{last_error}"
+                )
             finally:
                 browser.close()
 

@@ -23,5 +23,8 @@ desktop.ini
 .idea/
 .vscode/
 
+# Local run logs written by run_tracker.cmd (Task Scheduler)
+logs/
+
 # NOTE: tracker.db is intentionally NOT ignored. The scheduled GitHub Action
 # commits it back to the branch so price history survives between runs.
