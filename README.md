@@ -170,6 +170,7 @@ link to the product.
 ```text
 python src/tracker.py                      # check every target
 python src/tracker.py --dry-run            # fetch + store, print alerts instead of sending
+python src/tracker.py --send-now           # also post the current prices, changed or not
 python src/tracker.py --target "Chair"     # only the named target (repeatable)
 python src/tracker.py --init-db            # create tracker.db and exit
 python src/tracker.py --list-targets       # show resolved targets
@@ -221,7 +222,8 @@ negative, empty or non-numeric.
 
 - `schedule: - cron: "0 8 * * *"` → daily at 08:00 UTC
 - `workflow_dispatch` → manual run, with an optional **dry run** checkbox
-- `push` that touches the workflow file (useful to smoke-test a change)
+- `push` that touches the workflow file or `test_push.md` → smoke test that
+  sends the prices immediately (see below)
 
 ### Setup
 
@@ -240,6 +242,24 @@ negative, empty or non-numeric.
 
 The job writes the new rows to `tracker.db` and commits the file back to the
 current branch with a `[skip ci]` marker, so history accumulates between runs.
+
+### Sending the prices right after a push
+
+To get a message within a minute instead of waiting for 08:00 UTC, either:
+
+- **push the test file:** change `test_push.md`, commit, push. The workflow
+  listens for that path and runs with `--send-now`, so every current price is
+  posted even though nothing changed.
+- **or click it:** **Actions → Daily Price Check → Run workflow**.
+
+`--send-now` exists because the normal run only alerts on a baseline or a real
+price movement, so a fresh push (prices unchanged) would otherwise send
+nothing at all. It is also handy from the PC:
+
+```powershell
+python src/tracker.py --send-now             # real message
+python src/tracker.py --send-now --dry-run   # show the payload in the log
+```
 
 > **Privacy note:** committing the database means your price history is public
 > if the repository is public. Use a private repo, or drop the "Commit updated

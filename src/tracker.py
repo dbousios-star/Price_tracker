@@ -4,6 +4,7 @@ Usage::
 
     python src/tracker.py                  # check every target
     python src/tracker.py --dry-run        # log alerts instead of sending them
+    python src/tracker.py --send-now       # also post the current prices now
     python src/tracker.py --init-db        # create tracker.db and exit
     python src/tracker.py --target "Name"  # run a single target
 """
@@ -30,7 +31,7 @@ from src.config import (  # noqa: E402  (import after the sys.path fix)
     resolve_path,
 )
 from src.database import PriceDelta, TrackerDB, compute_change  # noqa: E402
-from src.notifier import Notifier, format_money, format_percent  # noqa: E402
+from src.notifier import Notifier, ReportEntry, format_money, format_percent  # noqa: E402
 from src.scraper import PriceScraper, ScraperError  # noqa: E402
 
 LOGGER = logging.getLogger("price_tracker")
@@ -171,6 +172,27 @@ class PriceTracker:
         result.alerted = self.notifier.notify_change(result.target, result.price, delta)
 
     # -- reporting ---------------------------------------------------------
+    def send_report(self, results: Sequence[CheckResult]) -> dict[str, str]:
+        """Push the current prices, changed or not (``--send-now``).
+
+        Change alerts stay quiet when nothing moved, so a manual or
+        push-triggered run needs this to produce a message at all.
+        """
+        entries = [
+            ReportEntry(result.target.name, result.price, result.target.currency)
+            for result in results
+            if result.price is not None
+        ]
+        if not entries:
+            LOGGER.warning("No price to report: every target failed, snapshot not sent.")
+            return {}
+
+        failures = len(results) - len(entries)
+        note = f"{failures} target(s) could not be checked." if failures else ""
+        outcome = self.notifier.notify_report(entries, note)
+        LOGGER.info("Price snapshot delivery: %s", outcome)
+        return outcome
+
     def summary(self, results: Sequence[CheckResult]) -> str:
         """Human readable table for the end of the run."""
         header = ("Target", "Status", "Previous", "Current", "Change")
@@ -211,6 +233,7 @@ class PriceTracker:
 EPILOG = """examples:
   python src/tracker.py                      check every target in targets.json
   python src/tracker.py --dry-run            print alerts instead of sending them
+  python src/tracker.py --send-now           post the current prices right away
   python src/tracker.py --target "Chair"     run a single target by name
   python src/tracker.py --init-db            create tracker.db and exit
   python src/tracker.py --show-history URL   print the stored price history for URL
@@ -240,6 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Fetch prices and update the database, but log notifications instead of sending them.",
+    )
+    parser.add_argument(
+        "--send-now",
+        action="store_true",
+        help="Also send a snapshot of the current prices, even when nothing changed.",
     )
     parser.add_argument("--init-db", action="store_true", help="Create the database schema and exit.")
     parser.add_argument("--list-targets", action="store_true", help="Print the configured targets and exit.")
@@ -333,6 +361,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     results = tracker.run()
     print()
     print(tracker.summary(results))
+    if args.send_now:
+        tracker.send_report(results)
     return 0 if all(result.ok for result in results) else 1
 
 

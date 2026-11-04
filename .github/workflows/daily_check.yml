@@ -11,8 +11,11 @@ on:
         type: boolean
         default: false
   push:
+    # Pushing a change to the workflow or to test_push.md runs the job at once
+    # and sends the current prices (see the SEND_NOW variable below).
     paths:
       - ".github/workflows/daily_check.yml"
+      - "test_push.md"
 
 permissions:
   contents: write # required to commit tracker.db back to the branch
@@ -65,13 +68,21 @@ jobs:
           # appears, so give the browser more room than the 20s default.
           REQUEST_TIMEOUT: "60"
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          # True when the run was started by a push: the prices are then sent
+          # straight away, because an unchanged price would stay silent.
+          SEND_NOW: ${{ github.event_name == 'push' }}
         run: |
+          ARGS=""
           if [ "$INPUT_DRY_RUN" = "true" ]; then
             echo "Dry run requested - alerts will be logged, not sent."
-            python src/tracker.py --dry-run
-          else
-            python src/tracker.py
+            ARGS="--dry-run"
           fi
+          if [ "$SEND_NOW" = "true" ]; then
+            echo "Triggered by a push - also sending a price snapshot."
+            ARGS="$ARGS --send-now"
+          fi
+          echo "Running: python src/tracker.py $ARGS"
+          python src/tracker.py $ARGS
 
       - name: Commit updated price history
         run: |

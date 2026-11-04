@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Sequence
 
 import requests
 
@@ -208,6 +208,44 @@ def build_error_alert(target: Target, error: str) -> Alert:
     )
 
 
+@dataclass(frozen=True)
+class ReportEntry:
+    """One line of a ``--send-now`` price snapshot."""
+
+    name: str
+    price: Optional[float]
+    currency: str = ""
+
+
+def build_report_alert(entries: Sequence[ReportEntry], note: str = "") -> Alert:
+    """Snapshot of the current prices, sent on demand instead of on change.
+
+    A scheduled run stays silent when no price moved, so "show me the prices
+    right now" needs its own alert: this one lists every price regardless.
+    """
+    shown = list(entries)[:20]  # Discord refuses embeds with more than 25 fields
+    fields: list[tuple[str, str]] = [
+        (entry.name, format_money(entry.price, entry.currency)) for entry in shown
+    ]
+    fields.append(("Checked", _format_timestamp()))
+
+    hidden = len(entries) - len(shown)
+    summary = f"Current prices for {len(entries)} tracked product(s)."
+    if hidden:
+        summary += f" {hidden} more not shown."
+    if note:
+        summary += f" {note}"
+
+    return Alert(
+        title="Price snapshot",
+        summary=summary,
+        emoji="🧾",
+        color=COLOR_BASELINE,
+        footer="Price Tracker · snapshot",
+        fields=tuple(fields),
+    )
+
+
 class Notifier:
     """Sends :class:`Alert` objects to every configured channel."""
 
@@ -315,5 +353,9 @@ class Notifier:
             LOGGER.info("Error alerts are disabled (NOTIFY_ON_ERROR=false); not sending.")
             return {"disabled": "NOTIFY_ON_ERROR=false"}
         return self.send_alert(build_error_alert(target, error))
+
+    def notify_report(self, entries: Sequence[ReportEntry], note: str = "") -> dict[str, str]:
+        """Send a price snapshot on demand (``--send-now``)."""
+        return self.send_alert(build_report_alert(entries, note))
 
 
