@@ -267,6 +267,29 @@ negative, empty or non-numeric.
 The job writes the new rows to `tracker.db` and commits the file back to the
 current branch with a `[skip ci]` marker, so history accumulates between runs.
 
+### What to expect from the cron
+
+- **UTC, not local time.** `0 8 * * *` is 10:00 in Athens in winter (11:00 in
+  summer). Write the time you want in UTC, e.g. two checks a day:
+  `- cron: "0 8,20 * * *"`.
+- **Best effort.** GitHub queues scheduled runs and they can start 5-20 minutes
+  late when the platform is busy, so do not build anything on exact timing.
+- **Default branch only.** A schedule on a branch other than `main` never
+  fires.
+- **Cost.** A run takes roughly 3-4 minutes (pip, Chromium download, scrape).
+  The 2,000 free minutes/month for private repositories cover well over a dozen
+  runs a day; one or two is nowhere near the limit.
+- **The 60-day rule looks after itself.** GitHub disables a schedule after 60
+  days of repository inactivity, and every run commits `tracker.db` back, which
+  counts as activity.
+- **Failures announce themselves.** The last step, "Report failure to Discord",
+  runs only when something failed and posts the run URL to the same webhook, so
+  a broken cron does not fail silently. It is skipped when
+  `DISCORD_WEBHOOK_URL` is not set.
+
+To prove the whole chain works without waiting for 08:00 UTC, use the
+`workflow_dispatch` button or the `test_push.md` push described next.
+
 ### Sending the prices right after a push
 
 To get a message within a minute instead of waiting for 08:00 UTC, either:

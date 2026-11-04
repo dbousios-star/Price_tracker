@@ -106,3 +106,28 @@ jobs:
           echo "Could not push tracker.db after 3 attempts." >&2
           exit 1
 
+      - name: Report failure to Discord
+        # A scheduled job fails silently: nobody watches the Actions tab at 08:00
+        # UTC. This posts the run URL to the same webhook. Best effort only - it
+        # must never change the outcome, and the job is already failing here.
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL is not set - cannot report the failure."
+            exit 0
+          fi
+          python - > /tmp/payload.json <<'PY'
+          import json, os
+          print(json.dumps({
+              "content": "**Daily Price Check failed** - " + os.environ["RUN_URL"],
+          }))
+          PY
+          curl -sS --max-time 20 -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/payload.json \
+            -o /dev/null -w 'failure notice: discord=%{http_code}\n' || true
+          exit 0
+
