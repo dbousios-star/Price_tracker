@@ -1,0 +1,27 @@
+# Secrets - never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# NOTE: tracker.db is intentionally NOT ignored. The scheduled GitHub Action
+# commits it back to the branch so price history survives between runs.

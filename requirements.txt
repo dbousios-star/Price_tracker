@@ -1,0 +1,11 @@
+# Core runtime dependencies
+requests>=2.31.0
+beautifulsoup4>=4.12.3
+lxml>=5.2.1
+python-dotenv>=1.0.1
+
+# Optional: dynamic-content fallback (requirement 3.A).
+# Uncomment the two lines below (and run `playwright install chromium`) when a
+# target renders its price with client-side JavaScript and you set
+# "use_playwright": true for it in targets.json.
+# playwright>=1.44.0

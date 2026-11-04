@@ -1,0 +1,89 @@
+name: Daily Price Check
+
+on:
+  schedule:
+    # Every day at 08:00 UTC (requirement 4).
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Log alerts instead of sending them"
+        type: boolean
+        default: false
+  push:
+    paths:
+      - ".github/workflows/daily_check.yml"
+
+permissions:
+  contents: write # required to commit tracker.db back to the branch
+
+concurrency:
+  group: price-tracker
+  cancel-in-progress: false
+
+jobs:
+  check-prices:
+    name: Check prices
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create database if missing
+        run: python src/tracker.py --init-db
+
+      - name: Run price tracker
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DB_PATH: tracker.db
+          TARGETS_FILE: targets.json
+          ALERT_THRESHOLD_PCT: "0"
+          LOG_LEVEL: INFO
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            echo "Dry run requested - alerts will be logged, not sent."
+            python src/tracker.py --dry-run
+          else
+            python src/tracker.py
+          fi
+
+      - name: Commit updated price history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f tracker.db
+          if git diff --cached --quiet; then
+            echo "Price history unchanged - nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: update price history [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Pushed updated tracker.db (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed, rebasing and retrying..."
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || true
+            sleep 3
+          done
+          echo "Could not push tracker.db after 3 attempts." >&2
+          exit 1
