@@ -80,12 +80,18 @@ python src/tracker.py --dry-run
 
 # 7. real run
 python src/tracker.py
+
+# 8. or double-click "Send Prices Now.cmd" (Windows) to scrape and send at once
 ```
 
-The database file `tracker.db` is created in the project root (override with
-`DB_PATH` or `--db`). `targets.json` ships with two sandbox targets on
-<https://books.toscrape.com> so the first run succeeds without editing
-anything.
+`tracker.db` is created in the project root (override with `DB_PATH` or
+`--db`). `targets.json` tracks two skroutz.gr products; skroutz sits behind
+Cloudflare, so those entries set `"use_playwright": true` and Chromium has to
+be installed once:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install chromium
+```
 
 ---
 
@@ -180,15 +186,33 @@ python src/tracker.py --targets my.json    # use a different target file
 python src/tracker.py --log-level DEBUG    # verbose logging
 ```
 
+### One click on Windows
+
+Double-click **`Send Prices Now.cmd`** in the project folder, or the shortcut of
+the same name on the Desktop. It runs `--send-now`, so the current price of
+every target is read and posted even when nothing changed, and it leaves the
+output in the window (with a "Done" line and a key press before closing) so you
+can see what went out:
+
+```powershell
+.\Send Prices Now.cmd                # same as double-clicking it
+.\Send Prices Now.cmd --dry-run      # extra arguments are passed to tracker.py
+$env:PT_NO_PAUSE = 1                 # skip the final key press, e.g. in a script
+```
+
+`run_tracker.cmd` is the quiet twin: no window output, everything appended to
+`logs\tracker.log`. Use that one for Task Scheduler.
+
 Exit codes: `0` = every target checked, `1` = at least one target failed,
 `2` = configuration error. The summary table is printed at the end:
 
 ```text
-Target                                Status     Previous  Current  Change
-------------------------------------  ---------  --------  -------  --------
-A Light in the Attic (books.toscrape) baseline   -         £51.77   -
+Target                    Status     Previous  Current  Change
+------------------------  ---------  --------  -------  ------
+Creative Pebble speakers  unchanged  €83.88    €83.88   +0.00%
+Edifier speakers          unchanged  €69.54    €69.54   +0.00%
 
-1/1 target(s) checked successfully
+2/2 target(s) checked successfully
 ```
 
 ---
