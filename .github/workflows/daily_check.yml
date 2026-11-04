@@ -79,7 +79,7 @@ jobs:
           fi
           if [ "$SEND_NOW" = "true" ]; then
             echo "Triggered by a push - also sending a price snapshot."
-            ARGS="$ARGS --send-now"
+            ARGS="${ARGS:+$ARGS }--send-now"
           fi
           echo "Running: python src/tracker.py $ARGS"
           python src/tracker.py $ARGS
