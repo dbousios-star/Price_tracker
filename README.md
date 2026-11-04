@@ -12,8 +12,8 @@ local price history in SQLite, and sends rich alerts to **Telegram** and
 - **Calculate** absolute difference, percentage change, and savings.
 - **Notify** via the Telegram Bot API and/or a Discord webhook, with silent
   logging when nothing changed.
-- **Run itself** from GitHub Actions every day at 08:00 UTC and commit the
-  database back so history persists between runs.
+- **Run itself** from GitHub Actions six times a day between 08:00 and 20:00
+  UTC, and commit the database back so history persists between runs.
 
 ---
 
@@ -35,7 +35,7 @@ price_tracker/
 │   └── tracker.py               # CLI runner (entry point)
 └── .github/
     └── workflows/
-        └── daily_check.yml      # daily cron + manual trigger
+        └── daily_check.yml      # six checks a day + manual trigger
 ```
 
 Data flow: `tracker.py` → `scraper.fetch_price()` → `database.record_price()`
@@ -244,7 +244,8 @@ negative, empty or non-numeric.
 
 `.github/workflows/daily_check.yml` runs on:
 
-- `schedule: - cron: "0 8 * * *"` → daily at 08:00 UTC
+- `schedule: - cron: "23 8,10,12,14,16,18 * * *"` → six checks a day,
+  08:23 to 18:23 UTC
 - `workflow_dispatch` → manual run, with an optional **dry run** checkbox
 - `push` that touches the workflow file or `test_push.md` → smoke test that
   sends the prices immediately (see below)
@@ -273,19 +274,27 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
 
 ### What to expect from the cron
 
-- **UTC, not local time.** `0 8 * * *` is 10:00 in Athens in winter (11:00 in
-  summer). Write the time you want in UTC, e.g. two checks a day:
-  `- cron: "0 8,20 * * *"`.
-- **Best effort.** GitHub queues scheduled runs and they can start 5-20 minutes
-  late when the platform is busy, so do not build anything on exact timing.
+- **Six checks a day.** `23 8,10,12,14,16,18 * * *` fires at 08:23, 10:23,
+  12:23, 14:23, 16:23 and 18:23 UTC - 10:23 to 20:23 in Athens in winter, an
+  hour later in summer. Times are UTC, not local.
+- **Why `:23` and not `:00`.** GitHub documents the start of every hour as a
+  high-load period where scheduled runs are delayed and, if the load is high
+  enough, queued jobs are dropped. Any fixed non-zero minute avoids the pile-up.
+- **Best effort.** Runs are still queued and can start 5-20 minutes late, so do
+  not build anything on exact timing.
 - **Default branch only.** A schedule on a branch other than `main` never
   fires.
-- **Cost.** A run takes roughly 3-4 minutes (pip, Chromium download, scrape).
-  The 2,000 free minutes/month for private repositories cover well over a dozen
-  runs a day; one or two is nowhere near the limit.
-- **The 60-day rule looks after itself.** GitHub disables a schedule after 60
-  days of repository inactivity, and every run commits `tracker.db` back, which
-  counts as activity.
+- **Only drops are announced.** The workflow sets `NOTIFY_ON_INCREASE=false`, so
+  a price rise is stored in history but does not message you; falls and scrape
+  errors do. `ALERT_THRESHOLD_PCT=0` means any fall size counts - raise it in the
+  run step's `env` if a one-cent wobble is too noisy at six checks a day.
+- **Cost.** A run takes roughly 2-4 minutes (pip, Chromium, scrape), and six a
+  day uses about 400-700 of the 2,000 free minutes/month a private repository
+  gets. The "Cache Playwright browsers" step saves roughly a minute per run by
+  not re-downloading Chromium every time.
+- **The 60-day rule.** GitHub disables a schedule after 60 days without
+  repository activity *in a public repository*. This one is private, so it does
+  not apply - and the commit-back would count as activity in any case.
 - **Failures announce themselves.** The last step, "Report failure to Discord",
   runs only when something failed and posts the run URL to the same webhook, so
   a broken cron does not fail silently. It is skipped when
@@ -298,12 +307,12 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
   possible outcome for a job nobody is watching. The log prints the row count
   before and after the run, so you can see what was stored.
 
-To prove the whole chain works without waiting for 08:00 UTC, use the
+To prove the whole chain works without waiting for the next scheduled run, use the
 `workflow_dispatch` button or the `test_push.md` push described next.
 
 ### Sending the prices right after a push
 
-To get a message within a minute instead of waiting for 08:00 UTC, either:
+To get a message within a minute instead of waiting for the next scheduled run, either:
 
 - **push the test file:** change `test_push.md`, commit, push. The workflow
   listens for that path and runs with `--send-now`, so every current price is

@@ -2,8 +2,11 @@ name: Daily Price Check
 
 on:
   schedule:
-    # Every day at 08:00 UTC (requirement 4).
-    - cron: "0 8 * * *"
+    # Six checks a day between 08:00 and 20:00 UTC: 08:23, 10:23, 12:23, 14:23,
+    # 16:23 and 18:23. :23 rather than :00 on purpose - GitHub documents high
+    # load at the start of every hour, where queued scheduled jobs can be
+    # delayed or dropped outright.
+    - cron: "23 8,10,12,14,16,18 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -48,6 +51,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Cache Playwright browsers
+        # Runners are ephemeral, so without this every run re-downloads ~130 MB
+        # of Chromium. Keyed on requirements.txt so a version bump invalidates it.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
       - name: Install Playwright Chromium
         # Needed by targets with "use_playwright": true (skroutz.gr / Cloudflare).
         run: python -m playwright install --with-deps chromium
@@ -63,6 +74,9 @@ jobs:
           DB_PATH: tracker.db
           TARGETS_FILE: targets.json
           ALERT_THRESHOLD_PCT: "0"
+          # Drops only: a rise is still recorded in history, it just does not
+          # message you six times a day.
+          NOTIFY_ON_INCREASE: "false"
           LOG_LEVEL: INFO
           # A Cloudflare interstitial can take 10-20s to clear before the price
           # appears, so give the browser more room than the 20s default.
