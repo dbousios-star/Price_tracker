@@ -257,8 +257,12 @@ negative, empty or non-numeric.
    - `TELEGRAM_CHAT_ID`
    - `DISCORD_WEBHOOK_URL`
    (skip any channel you do not use)
-3. **Settings → Actions → General → Workflow permissions** → select
-   **Read and write permissions** so the job can commit `tracker.db`.
+3. Leave **Settings → Actions → General → Workflow permissions** on the default
+   **Read repository contents and packages permissions**. The workflow already
+   asks for what it needs with a top-level `permissions: contents: write`, and
+   GitHub applies that *after* the repository default, so `tracker.db` can still
+   be pushed. (Switching the default to read/write also works — it just gives
+   every future workflow write access, which is the looser option.)
 4. Run the workflow once manually (**Actions → Daily Price Check → Run
    workflow**) and check the log.
 5. Note: scheduled workflows are disabled automatically after 60 days without
@@ -286,6 +290,13 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
   runs only when something failed and posts the run URL to the same webhook, so
   a broken cron does not fail silently. It is skipped when
   `DISCORD_WEBHOOK_URL` is not set.
+- **A no-op run is a failure, not a green tick.** Every successful scrape
+  appends a row, so if the commit step finds `tracker.db` unchanged it now stops
+  with `No new price rows were written` instead of reporting success. Before
+  that guard, a run that scraped nothing (Cloudflare block, wrong `DB_PATH`,
+  empty `targets.json`) finished green with no commit and no alert — the worst
+  possible outcome for a job nobody is watching. The log prints the row count
+  before and after the run, so you can see what was stored.
 
 To prove the whole chain works without waiting for 08:00 UTC, use the
 `workflow_dispatch` button or the `test_push.md` push described next.

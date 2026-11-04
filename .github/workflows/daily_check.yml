@@ -86,12 +86,19 @@ jobs:
 
       - name: Commit updated price history
         run: |
+          # Prints the row count so the log shows what the run actually stored
+          # ("Create database if missing" above prints the count before it).
+          python src/tracker.py --init-db
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f tracker.db
           if git diff --cached --quiet; then
-            echo "Price history unchanged - nothing to commit."
-            exit 0
+            # Every successful scrape appends a price_history row, so a clean
+            # tree here means the run went green without recording anything
+            # (Cloudflare block, wrong DB_PATH, empty targets.json ...).
+            # Fail loudly: a silent no-op must not look like a good run.
+            echo "::error::No new price rows were written - tracker.db is unchanged."
+            exit 1
           fi
           git commit -m "chore: update price history [skip ci]"
           for attempt in 1 2 3; do
