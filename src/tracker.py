@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -77,6 +79,9 @@ class PriceTracker:
         self.db = database or TrackerDB(settings.db_path)
         self.notifier = notifier or Notifier(settings, dry_run=dry_run)
         self.dry_run = dry_run
+        # Channels that rejected a message during this run. Scraping can go
+        # perfectly while delivery fails silently, so the exit code needs this.
+        self.delivery_failures: list[str] = []
 
     # -- orchestration -----------------------------------------------------
     def run(self) -> list[CheckResult]:
@@ -124,7 +129,9 @@ class PriceTracker:
         result.error = f"{type(exc).__name__}: {exc}"
         LOGGER.error("[%s] %s", result.target.name, result.error)
         try:
-            result.alerted = self.notifier.notify_error(result.target, result.error)
+            result.alerted = self._note_delivery(
+                self.notifier.notify_error(result.target, result.error)
+            )
         except Exception as notify_error:  # noqa: BLE001
             LOGGER.warning("[%s] Could not send error alert: %s", result.target.name, notify_error)
         return result
@@ -137,7 +144,9 @@ class PriceTracker:
 
         if delta.direction == "baseline":
             if self.settings.notify_on_baseline:
-                result.alerted = self.notifier.notify_baseline(result.target, result.price)
+                result.alerted = self._note_delivery(
+                    self.notifier.notify_baseline(result.target, result.price)
+                )
             else:
                 LOGGER.info(
                     "[%s] Baseline recorded; NOTIFY_ON_BASELINE=false so no alert was sent.",
@@ -169,7 +178,22 @@ class PriceTracker:
             )
             return
 
-        result.alerted = self.notifier.notify_change(result.target, result.price, delta)
+        result.alerted = self._note_delivery(
+            self.notifier.notify_change(result.target, result.price, delta)
+        )
+
+    def _note_delivery(self, outcome: dict[str, str]) -> dict[str, str]:
+        """Record and log every channel that rejected the message."""
+        for channel, result in (outcome or {}).items():
+            if isinstance(result, str) and result.startswith("failed"):
+                self.delivery_failures.append(f"{channel}: {result}")
+                LOGGER.error("Delivery to %s failed: %s", channel, result)
+        return outcome
+
+    @property
+    def delivery_ok(self) -> bool:
+        """False when at least one channel rejected a message this run."""
+        return not self.delivery_failures
 
     # -- reporting ---------------------------------------------------------
     def send_report(self, results: Sequence[CheckResult]) -> dict[str, str]:
@@ -189,7 +213,7 @@ class PriceTracker:
 
         failures = len(results) - len(entries)
         note = f"{failures} target(s) could not be checked." if failures else ""
-        outcome = self.notifier.notify_report(entries, note)
+        outcome = self._note_delivery(self.notifier.notify_report(entries, note))
         LOGGER.info("Price snapshot delivery: %s", outcome)
         return outcome
 
@@ -237,6 +261,12 @@ EPILOG = """examples:
   python src/tracker.py --target "Chair"     run a single target by name
   python src/tracker.py --init-db            create tracker.db and exit
   python src/tracker.py --show-history URL   print the stored price history for URL
+
+exit codes:
+  0  every target was checked and every message was delivered
+  1  at least one target could not be checked (scrape/config-of-target problem)
+  2  configuration error (settings or targets.json could not be loaded)
+  3  the prices were saved, but a notification channel rejected the message
 """
 
 
@@ -281,12 +311,66 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+class _FileTee:
+    """Write to the console and to an open log file at the same time."""
+
+    def __init__(self, stream, handle) -> None:
+        self._stream = stream
+        self._handle = handle
+
+    def write(self, text: str) -> int:
+        written = self._stream.write(text)
+        try:
+            self._handle.write(text)
+            self._handle.flush()
+        except (OSError, ValueError):  # a sick log file must never kill the run
+            pass
+        return len(text) if written is None else written
+
+    def flush(self) -> None:
+        for flush in (self._stream.flush, self._handle.flush):
+            try:
+                flush()
+            except (OSError, ValueError, AttributeError):
+                pass
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+def _tee_output_to_log_file() -> None:
+    """Also copy the run's output into $TRACKER_LOG_FILE, when it is set.
+
+    The one-click launchers set it so a manual run leaves a log behind. Doing the
+    tee here keeps the console output live and the bytes exact: shell tee helpers
+    on Windows either write UTF-16 (PowerShell 5.1 Tee-Object) or decode the
+    child's UTF-8 as the ANSI code page, which turns "EUR 83.88" into mojibake.
+    """
+    path = (os.getenv("TRACKER_LOG_FILE") or "").strip()
+    if not path:
+        return
+    if isinstance(sys.stdout, _FileTee) or isinstance(sys.stderr, _FileTee):
+        return  # configure_logging ran twice; never stack a second tee
+    try:
+        resolved = Path(path).expanduser()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        handle = resolved.open("a", encoding="utf-8", errors="replace")
+        handle.write(f"\n===== run started {datetime.now():%Y-%m-%d %H:%M:%S} =====\n")
+        handle.flush()
+    except OSError as exc:
+        print(f"Could not open TRACKER_LOG_FILE {path}: {exc}", file=sys.stderr)
+        return
+    sys.stdout = _FileTee(sys.stdout, handle)
+    sys.stderr = _FileTee(sys.stderr, handle)
+
+
 def configure_logging(level: str) -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):  # not a TextIOWrapper
             pass
+    _tee_output_to_log_file()
     numeric = getattr(logging, str(level).upper(), logging.INFO)
     logging.basicConfig(
         level=numeric,
@@ -363,6 +447,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(tracker.summary(results))
     if args.send_now:
         tracker.send_report(results)
+
+    if not tracker.delivery_ok:
+        # The rows are already in the database, so history is safe; only the
+        # message was lost. Exit 3 keeps that distinct from a scrape failure (1)
+        # instead of reporting a green run that told the user nothing.
+        print()
+        print("DELIVERY FAILED - the prices above were saved, but these channels rejected the message:")
+        for failure in dict.fromkeys(tracker.delivery_failures):
+            print(f"  ! {failure}")
+        print("  Check DISCORD_WEBHOOK_URL / TELEGRAM_* - the webhook must be one single line.")
+        return 3
+
     return 0 if all(result.ok for result in results) else 1
 
 

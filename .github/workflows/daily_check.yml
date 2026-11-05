@@ -102,6 +102,10 @@ jobs:
           python src/tracker.py $ARGS
 
       - name: Commit updated price history
+        # Rows are written before any alert is sent, so the prices must still be
+        # committed when delivery failed (the tracker then exits 3). Only a
+        # cancelled run is skipped: success() || failure() excludes that case.
+        if: success() || failure()
         run: |
           # Prints the row count so the log shows what the run actually stored
           # ("Create database if missing" above prints the count before it).

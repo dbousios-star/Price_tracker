@@ -34,17 +34,34 @@ if not exist "%PY%" (
 echo Reading the current prices of every target (about 15 seconds)...
 echo.
 
+rem The tracker copies its own output into logs\tracker.log (TRACKER_LOG_FILE), so
+rem this window stays live and the file survives after the window is closed.
+rem logs\ is gitignored. No shell tee on purpose: PowerShell 5.1 writes UTF-16 and
+rem re-parses the arguments, which corrupts the log and splits a two-word
+rem "--target" value into two arguments.
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+set "LOG=%~dp0logs\tracker.log"
+set "TRACKER_LOG_FILE=%LOG%"
+
 "%PY%" "src\tracker.py" --send-now %*
 set "RC=%ERRORLEVEL%"
 
 echo.
+rem Exit code 3 means the prices were stored but the chat message was rejected.
 if "%RC%"=="0" (
-  echo Done - the prices above were sent to your chat.
+  echo Done - every message was accepted by the chat channel ^(see delivery above^).
+) else if "%RC%"=="3" (
+  echo The prices were SAVED but NOT delivered - exit code 3.
+  echo The webhook is the usual cause: it must be one single line, with no
+  echo spaces and no "DISCORD_WEBHOOK_URL=" in front of it.
+  echo   local:  the DISCORD_WEBHOOK_URL line in .env
+  echo   cloud:  the DISCORD_WEBHOOK_URL secret in the GitHub repo settings
 ) else (
   echo Something went wrong, exit code %RC% - see the messages above.
   echo Common causes: no network, a changed Cloudflare challenge, or a missing
   echo DISCORD_WEBHOOK_URL / TELEGRAM_* entry in .env.
 )
+echo Full output: %LOG%
 
 :finish
 if not defined PT_NO_PAUSE pause
