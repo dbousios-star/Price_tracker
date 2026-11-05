@@ -6,6 +6,9 @@ on:
     # 16:23 and 18:23. :23 rather than :00 on purpose - GitHub documents high
     # load at the start of every hour, where queued scheduled jobs can be
     # delayed or dropped outright.
+    # Re-registered 2026-11-05: the GitHub API reported seven runs, all from
+    # 2026-11-04 pushes and none with event=schedule, while this workflow still
+    # showed as active. Re-saving the file makes GitHub re-read the cron.
     - cron: "23 8,10,12,14,16,18 * * *"
   workflow_dispatch:
     inputs:
