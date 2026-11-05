@@ -43,6 +43,12 @@ Data flow: `tracker.py` → `scraper.fetch_price()` → `database.record_price()
 
 ---
 
+**Project rules.** Anyone working on this repo - human or AI - must read
+[`AGENTS.md`](AGENTS.md) first. It carries the "two writers, one database"
+rule, the never-weaken-the-guard rule, and the commands that actually work.
+
+---
+
 ## 2. Prerequisites
 
 - Python 3.10 or newer (developed and tested on 3.12)
