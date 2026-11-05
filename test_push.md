@@ -15,4 +15,4 @@ How to use it:
 If the run fails with "no channel configured", the `DISCORD_WEBHOOK_URL`
 repository secret is still missing — see section 7 of `README.md`.
 
-Last test: 2026-11-04
+Last test: 2026-11-05 (verifying the corrected DISCORD_WEBHOOK_URL secret)
