@@ -285,6 +285,13 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
   high-load period where scheduled runs are delayed and, if the load is high
   enough, queued jobs are dropped. Any fixed non-zero minute avoids the pile-up.
 - **Best effort.** Runs are still queued and can start 5-20 minutes late, so do
+- **A green push run is not proof the schedule works.** On 2026-11-05 the
+  runs API showed seven runs and **none** with `event=schedule`, while this
+  workflow still reported `state=active`: the cron had never been delivered,
+  so the six daily checks were running zero times a day. Re-saving this file
+  (a comment is enough) and pushing makes GitHub re-read the schedule. The
+  only proof is a run whose `event` is `schedule`;
+  `.../actions/runs?event=schedule` returns the count.
   not build anything on exact timing.
 - **Default branch only.** A schedule on a branch other than `main` never
   fires.
@@ -375,6 +382,7 @@ In GitHub Actions also add a step before the run:
 | `Telegram responded HTTP 400` | Usually a wrong `chat_id` or a malformed token |
 | Nothing happens on a price change | `ALERT_THRESHOLD_PCT` too high, or `NOTIFY_ON_INCREASE=false` |
 | Baseline message on every run | The URL string differs between runs (tracking params, trailing slash) — normalise it in `targets.json` |
+| No scheduled runs at all; the Actions tab shows only pushes | The cron was never delivered. Re-save `.github/workflows/daily_check.yml` (any comment will do) and push, then check `.../actions/runs?event=schedule`. A push-triggered run proves the job, not the schedule |
 | History empty after CI run | `tracker.db` was not committed — check workflow permissions and the commit step |
 | Prices look 1000× too large | The site uses `.` as a thousands separator without decimals (e.g. `1.299`) |
 
