@@ -207,8 +207,14 @@ $env:PT_NO_PAUSE = 1                 # skip the final key press, e.g. in a scrip
 `run_tracker.cmd` is the quiet twin: no window output, everything appended to
 `logs\tracker.log`. Use that one for Task Scheduler.
 
-Exit codes: `0` = every target checked, `1` = at least one target failed,
-`2` = configuration error. The summary table is printed at the end:
+`Send Prices Now.cmd` writes to that same file: it sets `TRACKER_LOG_FILE`,
+which makes the tracker copy everything it prints into `logs\tracker.log`
+while keeping the window live, so a manual run leaves a log behind too.
+
+Exit codes: `0` = every target checked and every message delivered,
+`1` = at least one target failed, `2` = configuration error, `3` = the prices
+were stored but a chat channel rejected the message. The summary table is
+printed at the end:
 
 ```text
 Target                    Status     Previous  Current  Change
@@ -384,15 +390,18 @@ In GitHub Actions also add a step before the run:
 | Baseline message on every run | The URL string differs between runs (tracking params, trailing slash) — normalise it in `targets.json` |
 | No scheduled runs at all; the Actions tab shows only pushes | The cron was never delivered. Re-save `.github/workflows/daily_check.yml` (any comment will do) and push, then check `.../actions/runs?event=schedule`. A push-triggered run proves the job, not the schedule |
 | Run is green and rows are committed, but no Discord message arrives | Search the run log for `Price snapshot delivery`. If it says `failed: No connection adapters were found`, the `DISCORD_WEBHOOK_URL` secret is not a single-line URL (a multi-line paste reaches `requests` as an invalid URL). Copy the value from `.env` - one line, no `DISCORD_WEBHOOK_URL=` prefix, no spaces - and update it under Settings -> Secrets and variables -> Actions |
+| Run is red and the log says `DELIVERY FAILED` (exit 3) | The scrape worked and the rows are committed; a chat channel rejected the message. Fix the webhook (row above) - nothing else is wrong |
 | History empty after CI run | `tracker.db` was not committed — check workflow permissions and the commit step |
 | Prices look 1000× too large | The site uses `.` as a thousands separator without decimals (e.g. `1.299`) |
 
-**A green run is not proof that a message was sent.** Delivery is only
-logged, never reflected in the exit code, so check the run log for
-`Price snapshot delivery: {'discord': 'sent'}`. On 2026-11-05 the job was
-green for a day while every post failed, because the secret held a
-multi-line paste rather than the URL; `requests` reported `No connection
-adapters were found for '...'` and the run still exited 0.
+**A green run is not proof that a message was sent; exit code 3 is proof that
+it was not.** Since 2026-11-05 delivery is part of the exit code: a channel
+that answers `failed: ...` makes the tracker exit 3, print a `DELIVERY FAILED`
+block and turn the run red. The commit step runs on
+`success() || failure()`, so the prices are still saved - only the message is
+lost. Before that change the job stayed green for a day while every post
+failed, because the secret held a multi-line paste rather than the URL and
+`requests` reported `No connection adapters were found for '...'`.
 Debug with `--dry-run --log-level DEBUG`.
 
 ---

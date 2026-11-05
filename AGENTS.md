@@ -53,9 +53,13 @@ if git diff --cached --quiet; then echo "::error::No new price rows were written
 ```
 
 so a bot commit can only exist if the run inserted rows and pushed them. Never
-remove or soften that guard. If "commit only when the price changed" is ever
-wanted, the guard must be rewritten in the *same* commit, or every quiet run
-turns red.
+remove or soften that guard. The step also carries `if: success() || failure()`:
+delivery failures now exit 3 (see section 7), and without that condition a
+Discord outage would skip the commit and silently discard rows that were
+already written. Only cancelled runs are skipped.
+
+If "commit only when the price changed" is ever wanted, the guard must be
+rewritten in the *same* commit, or every quiet run turns red.
 
 Proof of a real cloud run:
 
@@ -100,12 +104,19 @@ $env:PYTHONUTF8=1; $env:PYTHONIOENCODING='utf-8'
 .venv\Scripts\python.exe src\tracker.py --init-db    # create DB / print row count, no scraping
 .venv\Scripts\python.exe src\tracker.py --dry-run    # scrape + store, log alerts instead of sending
 .venv\Scripts\python.exe src\tracker.py --send-now   # scrape + store + REALLY send to Discord
-run_tracker.cmd        # appends to logs\tracker.log; exit 0 ok / 1 target failed / 2 config error
+run_tracker.cmd        # appends to logs\tracker.log; exit 0 ok / 1 target failed / 2 config error / 3 not delivered
 "Send Prices Now.cmd"  # one-click --send-now with the output left visible
 ```
 
 `--init-db` and `--dry-run` still touch `tracker.db` - see section 2.
 `--send-now` sends real messages: run it only when the user asked for that.
+
+Exit code `3` means the scrape worked and the rows were written, but a channel
+rejected the message (a `DELIVERY FAILED` block is printed). It is never a
+reason to re-scrape. `TRACKER_LOG_FILE` makes the tracker copy its own stdout
+and logging into that file - `Send Prices Now.cmd` sets it to
+`logs\tracker.log`. Do not tee from the shell instead: PowerShell 5.1 writes
+UTF-16 and re-parses the arguments.
 
 ## 8. Secrets
 
