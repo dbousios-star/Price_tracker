@@ -9,7 +9,7 @@ A small Python price tracker for two Skroutz products. It scrapes a price with
 Playwright, appends it to `tracker.db` (SQLite, committed to this repo), and
 sends a Discord message when something is worth knowing. GitHub Actions runs it
 six times a day (08:23-18:23 UTC) so it keeps working with the PC off, and
-commits the updated database back with `[skip ci]`.
+commits the updated database back (no `[skip ci]` marker - see section 5).
 
 **The core goal:** reliable, unattended price history with alerts that matter.
 A change that makes it fail silently, lose history, or turn into six
@@ -65,7 +65,7 @@ Proof of a real cloud run:
 
 ```powershell
 git fetch origin
-git log --oneline origin/main -3   # expect "chore: update price history [skip ci]"
+git log --oneline origin/main -3   # expect "chore: update price history" (no [skip ci])
 git status -sb                     # expect "## main...origin/main", no ahead/behind
 ```
 
@@ -81,7 +81,15 @@ git status -sb                     # expect "## main...origin/main", no ahead/be
   about a minute per run.
 - Scheduled workflows only fire from the default branch (`main`).
 - The `push` trigger watches only `.github/workflows/daily_check.yml` and
-  `test_push.md`, and runs with `--send-now`, so a snapshot is always sent.
+  `test_push.md`. That `paths:` filter is also what makes the commit-back safe:
+  a commit that touches only `tracker.db` matches no path and starts no run, so
+  the bot commit never loops. **Do not add `tracker.db` to those paths.**
+- The bot commit message carries **no `[skip ci]` marker** (removed 2026-11-06).
+  GitHub documents skip markers as applying to `push`/`pull_request` only, but
+  "scheduled runs went silent after the commit-back" is widely reported, and the
+  marker bought nothing here because of the filter above.
+- `SEND_NOW: "true"` in the run step: every run ends with a *Price snapshot*
+  message, so a missing message means a missing run rather than "no change".
 
 ## 6. Alerting is drops-only, on purpose
 
@@ -89,9 +97,15 @@ git status -sb                     # expect "## main...origin/main", no ahead/be
 `env`. The order in `_dispatch` is: baseline -> unchanged -> threshold ->
 increase suppression -> send. A rise is stored in history and stays silent;
 falls and scrape errors notify. `CHANGE_EPSILON = 0.005` in `database.py` means
-anything under half a cent counts as unchanged. **A quiet day is the normal
-case** - do not "fix" silence by re-enabling increases without weighing the
+anything under half a cent counts as unchanged. **A quiet day used to be the
+normal case** - do not "fix" silence by re-enabling increases without weighing the
 six-alerts-a-day cost.
+
+The heartbeat is the one deliberate exception: `--send-now` posts a snapshot on
+every run, which is six messages a day. It is kept because silence and failure
+were indistinguishable, and `tracker.py` suppresses the snapshot whenever a
+change alert already went out, so a check still sends exactly one message.
+Turning `SEND_NOW` off is a one-line change in the workflow `env`.
 
 ## 7. Commands that actually work
 

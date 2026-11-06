@@ -297,7 +297,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--send-now",
         action="store_true",
-        help="Also send a snapshot of the current prices, even when nothing changed.",
+        help=(
+            "Also send a snapshot of the current prices, even when nothing changed. "
+            "Skipped when a change alert was already delivered this run, so a check "
+            "never produces two messages."
+        ),
     )
     parser.add_argument("--init-db", action="store_true", help="Create the database schema and exit.")
     parser.add_argument("--list-targets", action="store_true", help="Print the configured targets and exit.")
@@ -446,7 +450,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print()
     print(tracker.summary(results))
     if args.send_now:
-        tracker.send_report(results)
+        # One message per check. When a change alert actually reached a channel
+        # the user knows this run happened, so a snapshot on top would duplicate
+        # it. A failed alert does not count: sending the snapshot is then the
+        # last chance to reach the user (the run still exits 3). A dry run
+        # delivers nothing, so it always prints the snapshot payload.
+        delivered = any(
+            outcome == "sent"
+            for result in results
+            for outcome in (result.alerted or {}).values()
+        )
+        if not args.dry_run and delivered:
+            LOGGER.info("A change alert was already sent this run - snapshot skipped.")
+        else:
+            tracker.send_report(results)
 
     if not tracker.delivery_ok:
         # The rows are already in the database, so history is safe; only the

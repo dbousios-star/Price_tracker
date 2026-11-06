@@ -85,9 +85,16 @@ jobs:
           # appears, so give the browser more room than the 20s default.
           REQUEST_TIMEOUT: "60"
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
-          # True when the run was started by a push: the prices are then sent
-          # straight away, because an unchanged price would stay silent.
-          SEND_NOW: ${{ github.event_name == 'push' }}
+          # Always true. A run that finds unchanged prices sends nothing on its
+          # own, which made "the check ran and nothing moved" indistinguishable
+          # from "the check never ran at all" - the whole day could be silent
+          # while looking green. With this on, every run ends by posting a
+          # compact snapshot ("Price snapshot": one line per product plus a
+          # "Checked" timestamp), so a missing message now means a missing run.
+          # tracker.py skips the snapshot when a change alert already went out,
+          # so each check still produces exactly one message, not two.
+          # Set to "false" if six snapshots a day is too noisy.
+          SEND_NOW: "true"
         run: |
           ARGS=""
           if [ "$INPUT_DRY_RUN" = "true" ]; then
@@ -95,7 +102,7 @@ jobs:
             ARGS="--dry-run"
           fi
           if [ "$SEND_NOW" = "true" ]; then
-            echo "Triggered by a push - also sending a price snapshot."
+            echo "Sending a price snapshot after this check (SEND_NOW=true)."
             ARGS="${ARGS:+$ARGS }--send-now"
           fi
           echo "Running: python src/tracker.py $ARGS"
@@ -121,7 +128,10 @@ jobs:
             echo "::error::No new price rows were written - tracker.db is unchanged."
             exit 1
           fi
-          git commit -m "chore: update price history [skip ci]"
+          # No "[skip ci]" marker on purpose. The push trigger above only listens
+          # for daily_check.yml and test_push.md, so a commit that touches only
+          # tracker.db cannot start another run - there is no loop to suppress.
+          git commit -m "chore: update price history"
           for attempt in 1 2 3; do
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
               echo "Pushed updated tracker.db (attempt ${attempt})."

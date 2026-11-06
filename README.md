@@ -280,7 +280,15 @@ negative, empty or non-numeric.
    repository activity; re-enable from the Actions tab if that happens.
 
 The job writes the new rows to `tracker.db` and commits the file back to the
-current branch with a `[skip ci]` marker, so history accumulates between runs.
+current branch, so history accumulates between runs.
+
+> **Why the commit message has no `[skip ci]` marker.** It used to, to avoid a
+> push loop. The `push:` trigger is restricted to `paths:` `daily_check.yml` and
+> `test_push.md`, so a commit that touches only `tracker.db` does not match the
+> filter and starts no run — the loop cannot happen, and the marker was only
+> risking confusion (GitHub documents skip markers as applying to `push` and
+> `pull_request` only, but "scheduled runs stopped after the commit-back" is a
+> widely reported symptom, so the marker is gone as of 2026-11-06).
 
 ### What to expect from the cron
 
@@ -291,6 +299,7 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
   high-load period where scheduled runs are delayed and, if the load is high
   enough, queued jobs are dropped. Any fixed non-zero minute avoids the pile-up.
 - **Best effort.** Runs are still queued and can start 5-20 minutes late, so do
+  not build anything on exact timing.
 - **A green push run is not proof the schedule works.** On 2026-11-05 the
   runs API showed seven runs and **none** with `event=schedule`, while this
   workflow still reported `state=active`: the cron had never been delivered,
@@ -298,13 +307,19 @@ current branch with a `[skip ci]` marker, so history accumulates between runs.
   (a comment is enough) and pushing makes GitHub re-read the schedule. The
   only proof is a run whose `event` is `schedule`;
   `.../actions/runs?event=schedule` returns the count.
-  not build anything on exact timing.
+- **Every check announces itself.** `SEND_NOW: "true"` in the run step makes each
+  run end with a *Price snapshot* message - one line per product plus a
+  "Checked" timestamp - even when no price moved. A change alert counts as that
+  message: `tracker.py` skips the snapshot when a change alert was already
+  delivered, so a check produces exactly one message, never two. Silence now
+  means the run did not happen, not that nothing moved.
 - **Default branch only.** A schedule on a branch other than `main` never
   fires.
 - **Only drops are announced.** The workflow sets `NOTIFY_ON_INCREASE=false`, so
   a price rise is stored in history but does not message you; falls and scrape
   errors do. `ALERT_THRESHOLD_PCT=0` means any fall size counts - raise it in the
-  run step's `env` if a one-cent wobble is too noisy at six checks a day.
+  run step's `env` if a one-cent wobble is too noisy at six checks a day. The
+  end-of-run snapshot is not an alert: it lists every current price regardless.
 - **Cost.** A run takes roughly 2-4 minutes (pip, Chromium, scrape), and six a
   day uses about 400-700 of the 2,000 free minutes/month a private repository
   gets. The "Cache Playwright browsers" step saves roughly a minute per run by
@@ -336,9 +351,12 @@ To get a message within a minute instead of waiting for the next scheduled run, 
   posted even though nothing changed.
 - **or click it:** **Actions → Daily Price Check → Run workflow**.
 
-`--send-now` exists because the normal run only alerts on a baseline or a real
-price movement, so a fresh push (prices unchanged) would otherwise send
-nothing at all. It is also handy from the PC:
+`--send-now` posts a snapshot of the current prices - it exists because the normal
+run only alerts on a baseline or a real price movement, so a run with unchanged
+prices would send nothing at all. The workflow now sets `SEND_NOW: "true"`, so
+every cloud run (scheduled or not) ends with one. `tracker.py` drops the snapshot
+when a change alert was already delivered in the same run, so you never get two
+messages for one check. It is also handy from the PC:
 
 ```powershell
 python src/tracker.py --send-now             # real message
