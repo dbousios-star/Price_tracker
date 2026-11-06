@@ -2,14 +2,27 @@ name: Daily Price Check
 
 on:
   schedule:
-    # Six checks a day between 08:00 and 20:00 UTC: 08:23, 10:23, 12:23, 14:23,
-    # 16:23 and 18:23. :23 rather than :00 on purpose - GitHub documents high
-    # load at the start of every hour, where queued scheduled jobs can be
-    # delayed or dropped outright.
+    # Twelve checks a day, every one of them inside 08:00-22:00 Athens time.
+    #
+    # Cron is UTC and Athens is UTC+2 in winter / UTC+3 in summer, so a slot
+    # is only allowed if it is inside the window in BOTH seasons: summer needs
+    # hour+3 >= 08:00 and winter needs hour+2 < 22:00, which leaves
+    # 06:00-19:00 UTC. This list is 06:23-18:23 UTC.
+    #   winter (now): 08:23, 09:23, 10:23 ... 20:23  (12 inside the window)
+    #   summer      : 09:23, 10:23, 11:23 ... 21:23  (12 inside the window)
+    # A scheduler delay of up to ~35 minutes still keeps the last summer
+    # message before 22:00 (21:23 + 0:35), and a delay can only move a slot
+    # later, so the 08:00 floor is safe by construction.
+    #
+    # 08, 10, 12, 14, 16 and 18 are the original six; 06, 09, 11, 13, 15 and 17
+    # were added 2026-11-06 to make it twelve. :23 rather than :00 on purpose -
+    # GitHub documents high load at the start of every hour, where queued
+    # scheduled jobs can be delayed and, under load, dropped outright.
+    #
     # Re-registered 2026-11-05: the GitHub API reported seven runs, all from
     # 2026-11-04 pushes and none with event=schedule, while this workflow still
     # showed as active. Re-saving the file makes GitHub re-read the cron.
-    - cron: "23 8,10,12,14,16,18 * * *"
+    - cron: "23 6,8,9,10,11,12,13,14,15,16,17,18 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -78,7 +91,7 @@ jobs:
           TARGETS_FILE: targets.json
           ALERT_THRESHOLD_PCT: "0"
           # Drops only: a rise is still recorded in history, it just does not
-          # message you six times a day.
+          # message you twelve times a day.
           NOTIFY_ON_INCREASE: "false"
           LOG_LEVEL: INFO
           # A Cloudflare interstitial can take 10-20s to clear before the price
@@ -93,7 +106,7 @@ jobs:
           # "Checked" timestamp), so a missing message now means a missing run.
           # tracker.py skips the snapshot when a change alert already went out,
           # so each check still produces exactly one message, not two.
-          # Set to "false" if six snapshots a day is too noisy.
+          # Set to "false" if twelve snapshots a day is too noisy.
           SEND_NOW: "true"
         run: |
           ARGS=""

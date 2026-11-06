@@ -12,8 +12,9 @@ local price history in SQLite, and sends rich alerts to **Telegram** and
 - **Calculate** absolute difference, percentage change, and savings.
 - **Notify** via the Telegram Bot API and/or a Discord webhook, with silent
   logging when nothing changed.
-- **Run itself** from GitHub Actions six times a day between 08:00 and 20:00
-  UTC, and commit the database back so history persists between runs.
+- **Run itself** from GitHub Actions twelve times a day, every check between
+  08:00 and 22:00 Athens time, and commit the database back so history persists
+  between runs.
 
 ---
 
@@ -35,7 +36,7 @@ price_tracker/
 │   └── tracker.py               # CLI runner (entry point)
 └── .github/
     └── workflows/
-        └── daily_check.yml      # six checks a day + manual trigger
+        └── daily_check.yml      # twelve checks a day + manual trigger
 ```
 
 Data flow: `tracker.py` → `scraper.fetch_price()` → `database.record_price()`
@@ -254,8 +255,8 @@ negative, empty or non-numeric.
 
 `.github/workflows/daily_check.yml` runs on:
 
-- `schedule: - cron: "23 8,10,12,14,16,18 * * *"` → six checks a day,
-  08:23 to 18:23 UTC
+- `schedule: - cron: "23 6,8,9,10,11,12,13,14,15,16,17,18 * * *"` → twelve
+  checks a day, 06:23 to 18:23 UTC
 - `workflow_dispatch` → manual run, with an optional **dry run** checkbox
 - `push` that touches the workflow file or `test_push.md` → smoke test that
   sends the prices immediately (see below)
@@ -292,9 +293,26 @@ current branch, so history accumulates between runs.
 
 ### What to expect from the cron
 
-- **Six checks a day.** `23 8,10,12,14,16,18 * * *` fires at 08:23, 10:23,
-  12:23, 14:23, 16:23 and 18:23 UTC - 10:23 to 20:23 in Athens in winter, an
-  hour later in summer. Times are UTC, not local.
+- **Twelve checks a day, all inside 08:00-22:00 Athens time.**
+  `23 6,8,9,10,11,12,13,14,15,16,17,18 * * *` fires at 06:23, 08:23, 09:23,
+  10:23, 11:23, 12:23, 13:23, 14:23, 15:23, 16:23, 17:23 and 18:23 UTC.
+
+  | | first check | last check |
+  |---|---|---|
+  | Winter (Athens = UTC+2) | 08:23 | 20:23 |
+  | Summer (Athens = UTC+3) | 09:23 | 21:23 |
+
+  **Times in cron are UTC, not local**, and Athens moves one hour twice a year,
+  so a slot only works if it is inside the window in *both* seasons. Summer
+  needs `hour + 3 >= 08`, winter needs `hour + 2 < 22`; the overlap is
+  06:00-19:00 UTC. That is why the list starts at 06:23 and does not run into
+  the evening. If you ever change these hours, do the arithmetic first: add 2
+  to the UTC hour (winter) and 3 (summer), and both results must land between
+  08:00 and 22:00.
+- **The 08:00-22:00 promise has one caveat.** GitHub's scheduler can start a
+  job 5-20 minutes late, and a delay only ever moves a check *later*. The last
+  summer slot is 21:23, so a delay of up to ~35 minutes still lands before
+  22:00. Nothing can fire early: the earliest slot is already 08:23 in winter.
 - **Why `:23` and not `:00`.** GitHub documents the start of every hour as a
   high-load period where scheduled runs are delayed and, if the load is high
   enough, queued jobs are dropped. Any fixed non-zero minute avoids the pile-up.
@@ -303,7 +321,7 @@ current branch, so history accumulates between runs.
 - **A green push run is not proof the schedule works.** On 2026-11-05 the
   runs API showed seven runs and **none** with `event=schedule`, while this
   workflow still reported `state=active`: the cron had never been delivered,
-  so the six daily checks were running zero times a day. Re-saving this file
+  so the daily checks were running zero times a day. Re-saving this file
   (a comment is enough) and pushing makes GitHub re-read the schedule. The
   only proof is a run whose `event` is `schedule`;
   `.../actions/runs?event=schedule` returns the count.
@@ -318,12 +336,16 @@ current branch, so history accumulates between runs.
 - **Only drops are announced.** The workflow sets `NOTIFY_ON_INCREASE=false`, so
   a price rise is stored in history but does not message you; falls and scrape
   errors do. `ALERT_THRESHOLD_PCT=0` means any fall size counts - raise it in the
-  run step's `env` if a one-cent wobble is too noisy at six checks a day. The
+  run step's `env` if a one-cent wobble is too noisy at twelve checks a day. The
   end-of-run snapshot is not an alert: it lists every current price regardless.
-- **Cost.** A run takes roughly 2-4 minutes (pip, Chromium, scrape), and six a
-  day uses about 400-700 of the 2,000 free minutes/month a private repository
-  gets. The "Cache Playwright browsers" step saves roughly a minute per run by
-  not re-downloading Chromium every time.
+- **Cost.** A run takes roughly 2-4 minutes (pip, Chromium, scrape). Twelve a
+  day is roughly **800-1,400 of the 2,000 free minutes/month** a private
+  repository gets - most of the allowance. If the Actions tab ever shows runs
+  stuck in *Queued* or the billing page reports the quota spent, that is the
+  cause, and **making the repository public removes the ceiling entirely**
+  (standard runners on public repos are free and unmetered). The "Cache
+  Playwright browsers" step saves roughly a minute per run by not
+  re-downloading Chromium every time.
 - **The 60-day rule.** GitHub disables a schedule after 60 days without
   repository activity *in a public repository*. This one is private, so it does
   not apply - and the commit-back would count as activity in any case.

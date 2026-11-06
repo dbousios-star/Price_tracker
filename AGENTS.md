@@ -8,12 +8,16 @@ broken once, so they do not break twice.
 A small Python price tracker for two Skroutz products. It scrapes a price with
 Playwright, appends it to `tracker.db` (SQLite, committed to this repo), and
 sends a Discord message when something is worth knowing. GitHub Actions runs it
-six times a day (08:23-18:23 UTC) so it keeps working with the PC off, and
-commits the updated database back (no `[skip ci]` marker - see section 5).
+twelve times a day (06:23-18:23 UTC, which is 08:23-20:23 in Athens in winter and
+one hour later in summer - every check inside 08:00-22:00 local) so it keeps
+working with the PC off, and commits the updated database back (no `[skip ci]`
+marker - see section 5).
 
 **The core goal:** reliable, unattended price history with alerts that matter.
-A change that makes it fail silently, lose history, or turn into six
-notifications a day is a regression - flag it before doing it, even if asked.
+A change that makes it fail silently, lose history, or fire a notification
+outside the 08:00-22:00 Athens window is a regression - flag it before doing it,
+even if asked. (Twelve snapshots a day is a deliberate, user-requested choice,
+not drift: the user asked for all twelve checks to announce themselves.)
 
 ## 2. Two writers, one database - read this first
 
@@ -73,12 +77,17 @@ git status -sb                     # expect "## main...origin/main", no ahead/be
 
 - **The cron minute must not be `0`.** GitHub documents start-of-hour congestion
   where scheduled jobs are delayed and, under load, dropped. Current schedule:
-  `23 8,10,12,14,16,18 * * *`.
+  `23 6,8,9,10,11,12,13,14,15,16,17,18 * * *` (twelve checks).
 - The shortest interval GitHub allows is 5 minutes.
 - Cron is **UTC**; the user is in Athens (UTC+2 in winter, UTC+3 in summer).
-- Private repo: 2,000 free Action minutes per month. Six runs a day is roughly
-  400-700 minutes. **Keep the "Cache Playwright browsers" step** - it saves
-  about a minute per run.
+  **Every slot must sit inside 08:00-22:00 Athens in both seasons**, i.e. in
+  06:00-19:00 UTC. Changing hours without that arithmetic can put a check at
+  3am or at 23:00. A delay from GitHub's scheduler only moves a run later.
+- Private repo: 2,000 free Action minutes per month. Twelve runs a day is roughly
+  800-1,400 minutes - most of the allowance. If runs stop starting, check
+  Settings -> Billing before blaming the cron. **Making the repo public lifts the
+  ceiling** (public repos run on standard runners unmetered). **Keep the "Cache
+  Playwright browsers" step** - it saves about a minute per run.
 - Scheduled workflows only fire from the default branch (`main`).
 - The `push` trigger watches only `.github/workflows/daily_check.yml` and
   `test_push.md`. That `paths:` filter is also what makes the commit-back safe:
@@ -99,10 +108,10 @@ increase suppression -> send. A rise is stored in history and stays silent;
 falls and scrape errors notify. `CHANGE_EPSILON = 0.005` in `database.py` means
 anything under half a cent counts as unchanged. **A quiet day used to be the
 normal case** - do not "fix" silence by re-enabling increases without weighing the
-six-alerts-a-day cost.
+twelve-alerts-a-day cost.
 
 The heartbeat is the one deliberate exception: `--send-now` posts a snapshot on
-every run, which is six messages a day. It is kept because silence and failure
+every run, which is twelve messages a day. It is kept because silence and failure
 were indistinguishable, and `tracker.py` suppresses the snapshot whenever a
 change alert already went out, so a check still sends exactly one message.
 Turning `SEND_NOW` off is a one-line change in the workflow `env`.
