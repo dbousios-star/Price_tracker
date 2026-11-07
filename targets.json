@@ -12,5 +12,32 @@
     "css_selector": "div.price",
     "currency": "EUR",
     "use_playwright": true
+  },
+  {
+    "name": "Creative Pebble X (cosmodata)",
+    "url": "https://www.cosmodata.gr/product/427628/ikona-ichos/ichia-akoustika/ichia-ipologisti/bluetooth-ichia-2-0-creative-pebble-x-51mf1715aa000-me-rgb-fotismo-ischios-30w-rms-black",
+    "css_selector": "#price_katastima",
+    "currency": "EUR"
+  },
+  {
+    "name": "Edifier G2000 (bestprice.gr)",
+    "url": "https://www.bestprice.gr/item/2157813875/edifier-g2000-icheia-ypologisti-2-0-16w-me-bluetooth-rgb-fotismo-black.html",
+    "css_selector": "div.item-header-offer__price strong",
+    "currency": "EUR",
+    "use_playwright": true
+  },
+  {
+    "name": "Creative Pebble X (bestprice.gr)",
+    "url": "https://www.bestprice.gr/item/2160264507/creative-pebble-x-icheia-ypologisti-2-0-30w-me-bluetooth-rgb-fotismo-mple-mavra.html",
+    "css_selector": "div.item-header-offer__price strong",
+    "currency": "EUR",
+    "use_playwright": true
+  },
+  {
+    "name": "Edifier G2000 (shopflix)",
+    "url": "https://shopflix.gr/p/SF-06536169/ekheia-upologiste-edifier-g2000-rgb-asurmata-2-0-me-rgb-photismo-kai-bluetooth-iskhuos-32w-mauro",
+    "css_selector": "#price",
+    "currency": "EUR",
+    "price_divisor": 100
   }
 ]

@@ -127,6 +127,10 @@ class Target:
     css_selector: str
     currency: str = ""
     use_playwright: bool = False
+    #: Divide the parsed number by this to recover the real price. Some shops
+    #: render the euros and the cents in separate elements ("€79" + "00"), so a
+    #: naive text join reads 79.00 as 7900. Use 100 for those pages.
+    price_divisor: float = 1.0
 
     def __post_init__(self) -> None:
         if not str(self.name).strip():
@@ -139,6 +143,11 @@ class Target:
         if not str(self.css_selector).strip():
             raise ConfigError(
                 f"Target {self.name!r}: 'css_selector' must be a non-empty CSS selector."
+            )
+        if float(self.price_divisor) <= 0:
+            raise ConfigError(
+                f"Target {self.name!r}: 'price_divisor' must be greater than 0 "
+                f"(got {self.price_divisor!r})."
             )
 
 
@@ -191,12 +200,20 @@ def _target_from_mapping(index: int, data: Mapping[str, Any]) -> Target:
     if missing:
         raise ConfigError(f"Target #{index + 1} is missing required key(s): {', '.join(missing)}.")
     name = str(data.get("name") or f"target-{index + 1}").strip()
+    raw_divisor = data.get("price_divisor", 1.0)
+    try:
+        price_divisor = float(raw_divisor)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(
+            f"Target #{index + 1}: 'price_divisor' must be a number, got {raw_divisor!r}."
+        ) from exc
     return Target(
         name=name,
         url=str(data["url"]).strip(),
         css_selector=str(data["css_selector"]).strip(),
         currency=str(data.get("currency") or "").strip().upper(),
         use_playwright=bool(data.get("use_playwright", False)),
+        price_divisor=price_divisor,
     )
 
 

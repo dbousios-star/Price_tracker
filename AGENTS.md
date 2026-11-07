@@ -5,7 +5,8 @@ broken once, so they do not break twice.
 
 ## 1. What this project is, and its one job
 
-A small Python price tracker for two Skroutz products. It scrapes a price with
+A small Python price tracker for six products across four Greek shops
+(skroutz.gr, bestprice.gr, cosmodata.gr, shopflix.gr). It scrapes a price with
 Playwright, appends it to `tracker.db` (SQLite, committed to this repo), and
 sends a Discord message when something is worth knowing. GitHub Actions runs it
 twelve times a day (06:23-18:23 UTC, which is 08:23-20:23 in Athens in winter and
@@ -170,3 +171,15 @@ contents into chat.
   instead of assuming failure.
 - `git status` may report `tracker.db` as modified after some tools touch it.
   Check `git status --porcelain` before concluding a run wrote to it.
+- **shopflix.gr splits its price.** `€79` and `00` are separate child elements
+  and the comma is drawn by CSS, so `get_text(" ")` on `#price` produces `7900`
+  and the tracker would store 100x the real price. That target therefore sets
+  `"price_divisor": 100` (README 4.2). If any stored price looks 100x too big,
+  run once with `--log-level DEBUG` and inspect `raw_text` before touching the
+  selector. Conversely, a divisor on a shop that does *not* split prices would
+  make the price 100x too small.
+- **bestprice.gr refuses plain HTTP.** `requests` hangs and `curl` returns
+  nothing from this PC, so both bestprice targets need `"use_playwright": true`.
+  It is a comparison site: the tracked value is the *lowest* offer, read from
+  `div.item-header-offer__price strong` (e.g. 86,44 for the Edifier G2000). The
+  per-shop rows further down include shipping extras and must not be used.

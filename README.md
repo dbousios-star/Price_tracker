@@ -90,9 +90,10 @@ python src/tracker.py
 ```
 
 `tracker.db` is created in the project root (override with `DB_PATH` or
-`--db`). `targets.json` tracks two skroutz.gr products; skroutz sits behind
-Cloudflare, so those entries set `"use_playwright": true` and Chromium has to
-be installed once:
+`--db`). `targets.json` ships with six live targets across four Greek shops:
+two on skroutz.gr, two on bestprice.gr (both bot-protected), one on cosmodata.gr
+(plain HTTP) and one on shopflix.gr. The skroutz and bestprice entries set
+`"use_playwright": true`, so Chromium has to be installed once:
 
 ```powershell
 .\.venv\Scripts\python.exe -m playwright install chromium
@@ -133,6 +134,7 @@ A JSON array (a top-level `{"targets": [...]}` object is also accepted):
 | `css_selector` | **yes** | CSS selector of the element that contains the price |
 | `currency` | no | ISO code (`USD`, `EUR`, `GBP`, …) used to format amounts |
 | `use_playwright` | no | `true` renders the page in headless Chromium |
+| `price_divisor` | no | Divide the parsed number by this (`100` for shops that render `€79` and `00` as separate elements). Default `1` |
 
 ```json
 [
@@ -145,6 +147,16 @@ A JSON array (a top-level `{"targets": [...]}` object is also accepted):
   }
 ]
 ```
+
+**Split prices (`price_divisor`).** shopflix.gr renders the euros and the cents
+in two child elements — `€79` in one, `00` in the other — and draws the comma
+with CSS. The scraper joins an element's text, so `#price` on that page reads as
+`7900`. Declaring `"price_divisor": 100` divides it back to `79`.
+
+Only use it for shops that genuinely need it: if such a shop later starts
+rendering `79,00` in one piece, the tracked value becomes 100× too small. If a
+number looks wildly wrong, run once with `--log-level DEBUG` and compare the
+logged `raw_text` with the page.
 
 **Finding a selector:** open the product page, right-click the price →
 

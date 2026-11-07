@@ -139,6 +139,32 @@ def parse_price_text(raw: str) -> float:
     return round(value, 4)
 
 
+def _apply_price_divisor(
+    value: float, price_divisor: float, css_selector: str, url: str
+) -> float:
+    """Undo shops that split a price across elements ("€79" + "00").
+
+    The text join in :meth:`PriceScraper.extract_price` turns such a page into
+    ``79.00`` -> ``7900``, so a target may declare ``"price_divisor": 100`` to
+    divide the parsed number back down. See ``targets.json``.
+    """
+    try:
+        divisor = float(price_divisor)
+    except (TypeError, ValueError) as exc:
+        raise ScraperError(
+            f"price_divisor must be a number (got {price_divisor!r}) "
+            f"[selector={css_selector!r}, url={url or 'n/a'}]"
+        ) from exc
+    if divisor <= 0:
+        raise ScraperError(
+            f"price_divisor must be greater than 0 (got {divisor!r}) "
+            f"[selector={css_selector!r}, url={url or 'n/a'}]"
+        )
+    if divisor == 1.0:
+        return value
+    return round(value / divisor, 4)
+
+
 class PriceScraper:
     """Fetches product pages and extracts a normalised price."""
 
@@ -240,7 +266,13 @@ class PriceScraper:
             LOGGER.debug("Parser %r unavailable (%s); falling back to html.parser", self.parser, exc)
             return BeautifulSoup(html, "html.parser")
 
-    def extract_price(self, html: str, css_selector: str, url: str = "") -> float:
+    def extract_price(
+        self,
+        html: str,
+        css_selector: str,
+        url: str = "",
+        price_divisor: float = 1.0,
+    ) -> float:
         """Return the float price of the first element matching ``css_selector``."""
         soup = self._make_soup(html)
         try:
@@ -257,21 +289,34 @@ class PriceScraper:
 
         raw_text = element.get_text(" ", strip=True)
         try:
-            return parse_price_text(raw_text)
+            value = parse_price_text(raw_text)
         except PriceParseError as exc:
             raise PriceParseError(
                 f"{exc} [selector={css_selector!r}, url={url or 'n/a'}, raw_text={raw_text!r}]"
             ) from exc
+        return _apply_price_divisor(value, price_divisor, css_selector, url)
 
     # -- public API --------------------------------------------------------
-    def fetch_price(self, url: str, css_selector: str, use_playwright: bool = False) -> float:
+    def fetch_price(
+        self,
+        url: str,
+        css_selector: str,
+        use_playwright: bool = False,
+        price_divisor: float = 1.0,
+    ) -> float:
         """Fetch ``url`` and return the price found at ``css_selector``."""
         if use_playwright:
-            return self._fetch_price_with_playwright(url, css_selector)
+            return self._fetch_price_with_playwright(
+                url, css_selector, price_divisor=price_divisor
+            )
         html = self.fetch_html(url)
-        return self.extract_price(html, css_selector, url=url)
+        return self.extract_price(
+            html, css_selector, url=url, price_divisor=price_divisor
+        )
 
-    def _fetch_price_with_playwright(self, url: str, css_selector: str) -> float:
+    def _fetch_price_with_playwright(
+        self, url: str, css_selector: str, price_divisor: float = 1.0
+    ) -> float:
         """Headless-browser fallback for client-side rendered prices.
 
         Bot-protection interstitials (Cloudflare's "Just a moment...") beat
@@ -309,7 +354,9 @@ class PriceScraper:
                             css_selector, timeout=timeout_ms, state="attached"
                         )
                         raw_text = page.locator(css_selector).first.inner_text().strip()
-                        return parse_price_text(raw_text)
+                        return _apply_price_divisor(
+                            parse_price_text(raw_text), price_divisor, css_selector, url
+                        )
                     except PriceParseError:
                         raise
                     except Exception as exc:  # noqa: BLE001 - playwright raises its own tree
@@ -339,9 +386,15 @@ def fetch_price(
     use_playwright: bool = False,
     timeout: float = 20.0,
     session: Optional[requests.Session] = None,
+    price_divisor: float = 1.0,
 ) -> float:
     """Convenience one-shot wrapper around :class:`PriceScraper`."""
     scraper = PriceScraper(timeout=timeout, session=session)
-    return scraper.fetch_price(url, css_selector, use_playwright=use_playwright)
+    return scraper.fetch_price(
+        url,
+        css_selector,
+        use_playwright=use_playwright,
+        price_divisor=price_divisor,
+    )
 
 

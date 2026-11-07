@@ -95,7 +95,10 @@ class PriceTracker:
         try:
             result.previous = self.db.get_latest_price(target.url)
             result.price = self.scraper.fetch_price(
-                target.url, target.css_selector, use_playwright=target.use_playwright
+                target.url,
+                target.css_selector,
+                use_playwright=target.use_playwright,
+                price_divisor=target.price_divisor,
             )
         except ScraperError as exc:
             return self._fail(result, exc)
