@@ -188,3 +188,28 @@ contents into chat.
   It is a comparison site: the tracked value is the *lowest* offer, read from
   `div.item-header-offer__price strong` (e.g. 86,44 for the Edifier G2000). The
   per-shop rows further down include shipping extras and must not be used.
+
+## 11. Commit messages are part of the product
+
+The repository is public, so every commit subject is read by strangers. The
+whole history was normalised on 2026-11-08 with `git filter-branch
+--msg-filter` (tree unchanged), and every new commit must follow the same
+shape - Conventional Commits:
+
+```text
+type(scope): lowercase imperative summary
+```
+
+- `type` is one of `feat`, `fix`, `docs`, `test`, `ci`, `style`, `chore`.
+- `(scope)` is optional, e.g. `fix(ci):` or `chore(data):`.
+- Lowercase, imperative, no trailing period, 72 characters or fewer, and one
+  change per commit. No `[skip ci]` markers, no diary entries ("tried the other
+  approach again"), no semicolon-joined doubles.
+- Commits that only append rows use
+  `chore(data): record automated price snapshot`. The workflow's commit-back
+  step (`.github/workflows/daily_check.yml`) uses exactly that subject - change
+  both together or not at all.
+- Rewriting history is allowed only with proof that no file changed: capture
+  `git rev-parse 'HEAD^{tree}'` before and after (the two must match), keep a
+  local `backup/pre-reword` branch until the result is checked in the browser,
+  and push with `--force-with-lease`, never a bare `--force`.
