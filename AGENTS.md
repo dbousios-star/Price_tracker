@@ -5,8 +5,8 @@ broken once, so they do not break twice.
 
 ## 1. What this project is, and its one job
 
-A small Python price tracker for six products across four Greek shops
-(skroutz.gr, bestprice.gr, cosmodata.gr, shopflix.gr). It scrapes a price with
+A small Python price tracker for five products across three Greek shops
+(skroutz.gr, bestprice.gr, cosmodata.gr). It scrapes a price with
 Playwright, appends it to `tracker.db` (SQLite, committed to this repo), and
 sends a Discord message when something is worth knowing. GitHub Actions runs it
 twelve times a day (06:23-18:23 UTC, which is 08:23-20:23 in Athens in winter and
@@ -171,13 +171,18 @@ contents into chat.
   instead of assuming failure.
 - `git status` may report `tracker.db` as modified after some tools touch it.
   Check `git status --porcelain` before concluding a run wrote to it.
-- **shopflix.gr splits its price.** `€79` and `00` are separate child elements
-  and the comma is drawn by CSS, so `get_text(" ")` on `#price` produces `7900`
-  and the tracker would store 100x the real price. That target therefore sets
-  `"price_divisor": 100` (README 4.2). If any stored price looks 100x too big,
-  run once with `--log-level DEBUG` and inspect `raw_text` before touching the
-  selector. Conversely, a divisor on a shop that does *not* split prices would
-  make the price 100x too small.
+- **shopflix.gr was removed - do not re-add it blind.** It split its price
+  (`€79` and `00` as separate elements, comma drawn by CSS), which is why
+  `price_divisor` exists - but that target **never wrote a single row** from
+  GitHub Actions, while cosmodata and both bestprice targets wrote rows on the
+  same two runs (proof: `0` shopflix URLs in `origin/main:tracker.db` on
+  2026-11-07 vs rows for every other new target). It scrapes fine from a home
+  PC and fails from the runner, so both runs exited 1 and the workflow stayed
+  red until the target was deleted. If it is ever re-added, prove it with a
+  `workflow_dispatch` run **and** a new row in `tracker.db` before trusting it.
+- **`price_divisor` is still supported** (default `1.0`, README 4.2) for a
+  future shop that splits euros and cents. A wrong divisor makes a price 100x
+  too big or too small, so check the logged `raw_text` with `--log-level DEBUG`.
 - **bestprice.gr refuses plain HTTP.** `requests` hangs and `curl` returns
   nothing from this PC, so both bestprice targets need `"use_playwright": true`.
   It is a comparison site: the tracked value is the *lowest* offer, read from

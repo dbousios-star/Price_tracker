@@ -90,9 +90,9 @@ python src/tracker.py
 ```
 
 `tracker.db` is created in the project root (override with `DB_PATH` or
-`--db`). `targets.json` ships with six live targets across four Greek shops:
-two on skroutz.gr, two on bestprice.gr (both bot-protected), one on cosmodata.gr
-(plain HTTP) and one on shopflix.gr. The skroutz and bestprice entries set
+`--db`). `targets.json` ships with five live targets across three Greek shops:
+two on skroutz.gr, two on bestprice.gr (both bot-protected) and one on
+cosmodata.gr (plain HTTP). The skroutz and bestprice entries set
 `"use_playwright": true`, so Chromium has to be installed once:
 
 ```powershell
@@ -148,10 +148,14 @@ A JSON array (a top-level `{"targets": [...]}` object is also accepted):
 ]
 ```
 
-**Split prices (`price_divisor`).** shopflix.gr renders the euros and the cents
-in two child elements — `€79` in one, `00` in the other — and draws the comma
-with CSS. The scraper joins an element's text, so `#price` on that page reads as
+**Split prices (`price_divisor`).** Some shops render the euros and the cents in
+two child elements — `€79` in one, `00` in the other — and draw the comma with
+CSS. The scraper joins an element's text, so a selector over that element reads
 `7900`. Declaring `"price_divisor": 100` divides it back to `79`.
+
+No current target needs it: the shop that did (shopflix.gr) was dropped because
+it could not be scraped from GitHub Actions runners — see `AGENTS.md`. The key
+is kept for the next shop with that markup.
 
 Only use it for shops that genuinely need it: if such a shop later starts
 rendering `79,00` in one piece, the tracked value becomes 100× too small. If a

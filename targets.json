@@ -32,12 +32,5 @@
     "css_selector": "div.item-header-offer__price strong",
     "currency": "EUR",
     "use_playwright": true
-  },
-  {
-    "name": "Edifier G2000 (shopflix)",
-    "url": "https://shopflix.gr/p/SF-06536169/ekheia-upologiste-edifier-g2000-rgb-asurmata-2-0-me-rgb-photismo-kai-bluetooth-iskhuos-32w-mauro",
-    "css_selector": "#price",
-    "currency": "EUR",
-    "price_divisor": 100
   }
 ]
