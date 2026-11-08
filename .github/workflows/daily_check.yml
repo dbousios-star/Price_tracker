@@ -144,7 +144,7 @@ jobs:
           # No "[skip ci]" marker on purpose. The push trigger above only listens
           # for daily_check.yml and test_push.md, so a commit that touches only
           # tracker.db cannot start another run - there is no loop to suppress.
-          git commit -m "chore: update price history"
+          git commit -m "chore(data): record automated price snapshot"
           for attempt in 1 2 3; do
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
               echo "Pushed updated tracker.db (attempt ${attempt})."
